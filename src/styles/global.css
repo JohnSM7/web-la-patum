@@ -1,0 +1,125 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --color-bg: #0A0908;
+    --color-bg-soft: #14100D;
+    --color-text: #F5EFE6;
+    --color-flame: #FF6B1A;
+    --color-glow: #FFB627;
+    --color-deep: #C8390A;
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply bg-coal-500 text-coal-50 font-sans antialiased;
+    background-image:
+      radial-gradient(ellipse at top, rgba(255, 140, 30, 0.10) 0%, transparent 60%),
+      radial-gradient(ellipse at bottom, rgba(200, 57, 10, 0.08) 0%, transparent 65%),
+      linear-gradient(180deg, #0A0908 0%, #14100D 100%);
+    background-attachment: fixed;
+  }
+
+  ::selection {
+    background: #FF6B1A;
+    color: #0A0908;
+  }
+}
+
+@layer components {
+  .container-px {
+    @apply px-5 sm:px-8 lg:px-12;
+  }
+
+  .section {
+    @apply py-20 md:py-28 container-px;
+  }
+
+  .heading-display {
+    @apply font-display tracking-wide uppercase;
+  }
+
+  .text-fire {
+    background: linear-gradient(180deg, #FFE082 0%, #FFB627 30%, #FF6B1A 60%, #C8390A 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    text-shadow: 0 0 30px rgba(255, 140, 30, 0.25);
+  }
+
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-full px-7 py-3 font-medium tracking-wide transition-all duration-300;
+  }
+
+  .btn-fire {
+    @apply btn text-coal-500 relative overflow-hidden;
+    background: linear-gradient(180deg, #FFB627 0%, #FF6B1A 50%, #C8390A 100%);
+    box-shadow: 0 8px 24px -8px rgba(255, 107, 26, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.4);
+  }
+  .btn-fire:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 14px 32px -8px rgba(255, 107, 26, 0.75), 0 0 30px rgba(255, 180, 40, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.5);
+  }
+
+  .btn-ghost {
+    @apply btn border border-ember-500/40 text-ember-200 hover:border-ember-400 hover:text-ember-100;
+    backdrop-filter: blur(4px);
+  }
+  .btn-ghost:hover {
+    box-shadow: 0 0 24px rgba(255, 140, 30, 0.25);
+  }
+
+  .card {
+    @apply relative rounded-2xl border border-ember-500/15 bg-coal-200/40 backdrop-blur-sm overflow-hidden;
+    transition: border-color 0.3s, transform 0.3s, box-shadow 0.3s;
+  }
+  .card:hover {
+    @apply border-ember-500/40;
+    transform: translateY(-4px);
+    box-shadow: 0 20px 40px -20px rgba(0, 0, 0, 0.7), 0 0 30px rgba(255, 140, 30, 0.15);
+  }
+
+  .divider-flame {
+    height: 1px;
+    background: linear-gradient(90deg, transparent 0%, rgba(255, 140, 30, 0.6) 50%, transparent 100%);
+  }
+
+  .glow-ring {
+    box-shadow:
+      0 0 0 1px rgba(255, 140, 30, 0.25),
+      0 0 30px rgba(255, 140, 30, 0.18),
+      inset 0 0 30px rgba(200, 57, 10, 0.1);
+  }
+}
+
+@layer utilities {
+  .mask-fade-bottom {
+    mask-image: linear-gradient(180deg, #000 65%, transparent 100%);
+    -webkit-mask-image: linear-gradient(180deg, #000 65%, transparent 100%);
+  }
+
+  .text-shadow-fire {
+    text-shadow:
+      0 0 8px rgba(255, 180, 40, 0.65),
+      0 0 22px rgba(255, 107, 26, 0.55),
+      0 0 50px rgba(200, 57, 10, 0.45);
+  }
+}
+
+/* Embers floating animation */
+.ember-particle {
+  position: absolute;
+  bottom: -10px;
+  width: 4px;
+  height: 4px;
+  background: radial-gradient(circle, #FFB627 0%, #FF6B1A 50%, transparent 100%);
+  border-radius: 50%;
+  animation: emberRise linear infinite;
+  opacity: 0;
+  pointer-events: none;
+}

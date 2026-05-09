@@ -1,0 +1,34 @@
+# build
+dist/
+.output/
+
+# deps
+node_modules/
+
+# logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# env
+.env
+.env.production
+.env.local
+
+# editor
+.vscode/
+.idea/
+.DS_Store
+
+# astro
+.astro/
+
+# playwright outputs locales
+.playwright-mcp/
+/la-patum-hero.png
+
+# originales de logo en raíz (ya copiados limpios en public/img)
+/ChatGPT_Image_*.png
+/asdasd.png
+/asdsad.png

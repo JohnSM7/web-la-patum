@@ -1,0 +1,69 @@
+---
+import { useTranslations, type Lang } from '../i18n';
+interface Props { lang: Lang; }
+const { lang } = Astro.props;
+const t = useTranslations(lang);
+---
+
+<section id="nosaltres" class="section relative">
+  <div class="absolute inset-0 -z-10 bg-fire-radial opacity-40"></div>
+
+  <div class="mx-auto max-w-7xl">
+    <div class="grid lg:grid-cols-2 gap-12 lg:gap-20 items-center">
+      <div class="relative">
+        <div class="relative aspect-square rounded-3xl overflow-hidden glow-ring bg-coal-900 flex items-center justify-center p-10 sm:p-14">
+          <div
+            class="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 h-[80%] w-[80%] rounded-full opacity-50 blur-3xl"
+            style="background: radial-gradient(circle, rgba(255,140,30,0.55) 0%, rgba(200,57,10,0.28) 45%, transparent 75%);"
+          ></div>
+          <img
+            src="/img/logo-black.png"
+            alt="La Patum - Tapes & Més"
+            class="relative w-full h-full object-contain animate-glowPulse"
+            loading="lazy"
+          />
+        </div>
+        <div class="absolute -bottom-6 -right-6 hidden md:block">
+          <div class="rounded-2xl bg-flame-gradient p-5 shadow-[0_20px_50px_rgba(255,107,26,0.45)]">
+            <p class="font-display uppercase tracking-widest text-coal-500 text-xs">{t.about.badge.since}</p>
+            <p class="font-display text-3xl text-coal-500 leading-none mt-1">{t.about.badge.year}</p>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <p class="font-sans uppercase tracking-[0.35em] text-ember-400 text-xs mb-4">
+          {t.about.eyebrow}
+        </p>
+        <h2 class="heading-display text-4xl md:text-5xl lg:text-6xl mb-6 leading-tight">
+          {t.about.titleLeft} <span class="text-fire">{t.about.titleHighlight}</span><br />
+          {t.about.titleRight}
+        </h2>
+        <div class="divider-flame mb-8"></div>
+
+        <p class="font-serif text-lg text-coal-50/85 leading-relaxed mb-5">
+          {t.about.p1Pre}<strong class="text-ember-300">{t.about.brand}</strong>{t.about.p1Post}
+          <em>{t.about.p1Italic1}</em> {t.about.p1MidA}
+          <em>{t.about.p1Italic2}</em>{t.about.p1End}
+        </p>
+        <p class="font-serif text-lg text-coal-50/85 leading-relaxed mb-8">
+          {t.about.p2}
+        </p>
+
+        <div class="grid grid-cols-2 gap-4">
+          {
+            t.about.pillars.map((pillar) => (
+              <div class="card p-5">
+                <div class="flex items-center gap-3 mb-2">
+                  <span class="text-2xl">{pillar.icon}</span>
+                  <p class="font-display uppercase tracking-widest text-ember-300 text-sm">{pillar.title}</p>
+                </div>
+                <p class="text-sm text-coal-50/75">{pillar.text}</p>
+              </div>
+            ))
+          }
+        </div>
+      </div>
+    </div>
+  </div>
+</section>

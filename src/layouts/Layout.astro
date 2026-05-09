@@ -1,0 +1,58 @@
+---
+import '../styles/global.css';
+import { useTranslations, type Lang, locales, localizedPath } from '../i18n';
+
+interface Props {
+  lang?: Lang;
+}
+
+const { lang = 'ca' } = Astro.props;
+const t = useTranslations(lang);
+
+const siteUrl = 'https://lapatum.cat';
+const currentPath = localizedPath(lang);
+---
+
+<!doctype html>
+<html lang={lang}>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="generator" content={Astro.generator} />
+
+    <title>{t.meta.title}</title>
+    <meta name="description" content={t.meta.description} />
+
+    <link rel="icon" type="image/png" href="/img/logo-black.png" />
+    <link rel="apple-touch-icon" href="/img/logo-black.png" />
+
+    {/* hreflang for each locale */}
+    {
+      locales.map((l) => (
+        <link
+          rel="alternate"
+          hreflang={l}
+          href={`${siteUrl}${localizedPath(l)}`}
+        />
+      ))
+    }
+    <link rel="alternate" hreflang="x-default" href={`${siteUrl}/`} />
+    <link rel="canonical" href={`${siteUrl}${currentPath}`} />
+
+    <meta property="og:type" content="restaurant" />
+    <meta property="og:title" content={t.meta.title} />
+    <meta property="og:description" content={t.meta.description} />
+    <meta property="og:image" content={`${siteUrl}/img/logo-full.png`} />
+    <meta property="og:locale" content={lang === 'ca' ? 'ca_ES' : lang === 'es' ? 'es_ES' : 'en_GB'} />
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600;700;800&family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=Inter:wght@300;400;500;600&display=swap"
+      rel="stylesheet"
+    />
+  </head>
+  <body>
+    <slot />
+  </body>
+</html>
