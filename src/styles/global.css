@@ -111,15 +111,3 @@
   }
 }
 
-/* Embers floating animation */
-.ember-particle {
-  position: absolute;
-  bottom: -10px;
-  width: 4px;
-  height: 4px;
-  background: radial-gradient(circle, #FFB627 0%, #FF6B1A 50%, transparent 100%);
-  border-radius: 50%;
-  animation: emberRise linear infinite;
-  opacity: 0;
-  pointer-events: none;
-}

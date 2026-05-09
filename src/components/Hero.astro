@@ -1,5 +1,6 @@
 ---
 import { useTranslations, type Lang } from '../i18n';
+import EmbersCanvas from './EmbersCanvas.astro';
 interface Props { lang: Lang; }
 const { lang } = Astro.props;
 const t = useTranslations(lang);
@@ -16,7 +17,7 @@ const stats = [
   class="relative min-h-screen flex items-center justify-center overflow-hidden pt-24"
 >
   <div class="absolute inset-0 -z-10 bg-fire-radial"></div>
-  <div id="embers" class="absolute inset-0 -z-10 pointer-events-none overflow-hidden"></div>
+  <EmbersCanvas intensity={1.2} />
 
   <div
     class="absolute left-1/2 top-1/2 -z-10 h-[70vmin] w-[70vmin] -translate-x-1/2 -translate-y-1/2 rounded-full opacity-60 blur-3xl"
@@ -91,23 +92,3 @@ const stats = [
   </a>
 </section>
 
-<script>
-  const container = document.getElementById('embers');
-  if (container) {
-    const total = 24;
-    for (let i = 0; i < total; i++) {
-      const ember = document.createElement('span');
-      ember.className = 'ember-particle';
-      const left = Math.random() * 100;
-      const delay = Math.random() * 8;
-      const duration = 6 + Math.random() * 8;
-      const size = 2 + Math.random() * 4;
-      ember.style.left = `${left}%`;
-      ember.style.width = `${size}px`;
-      ember.style.height = `${size}px`;
-      ember.style.animationDelay = `${delay}s`;
-      ember.style.animationDuration = `${duration}s`;
-      container.appendChild(ember);
-    }
-  }
-</script>

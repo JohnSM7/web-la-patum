@@ -1,0 +1,371 @@
+---
+interface Props {
+  /** Densitat base d'espurnes (1 = densitat estàndard) */
+  intensity?: number;
+  /** Si vol fons obscur subtil amb resplendor inferior */
+  withGlow?: boolean;
+}
+const { intensity = 1, withGlow = true } = Astro.props;
+---
+
+<div class="absolute inset-0 -z-10 pointer-events-none overflow-hidden">
+  {withGlow && (
+    <div
+      class="absolute inset-x-0 bottom-0 h-1/3 opacity-70"
+      style="background: radial-gradient(ellipse at center bottom, rgba(255,140,30,0.18) 0%, rgba(200,57,10,0.08) 35%, transparent 65%);"
+    />
+  )}
+  <canvas
+    id="embers-canvas"
+    data-intensity={intensity}
+    class="absolute inset-0 h-full w-full"
+  ></canvas>
+</div>
+
+<script>
+  type Spark = {
+    x: number;
+    y: number;
+    vx: number;
+    vy: number;
+    life: number;
+    maxLife: number;
+    size: number;
+    hue: number;
+    seed: number;
+    spawnX: number;
+    spawnY: number;
+    travelMax: number;
+    volatility: number; // 0 = trajectòria estable, 1 = erràtica amb cops sobtats
+  };
+
+  const canvas = document.getElementById('embers-canvas') as HTMLCanvasElement | null;
+  if (canvas) {
+    const ctx = canvas.getContext('2d', { alpha: true })!;
+    const intensity = parseFloat(canvas.dataset.intensity ?? '1') || 1;
+    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    const sparks: Spark[] = [];
+    const MAX_SPARKS = Math.floor(180 * intensity);
+    // Si l'usuari té reduce-motion, animem igualment però amb menys
+    // intensitat i velocitat. Cap rama estàtica.
+    const intensityFinal = reduceMotion ? intensity * 0.4 : intensity;
+
+    let width = 0;
+    let height = 0;
+    let dpr = Math.min(window.devicePixelRatio || 1, 2);
+
+    const resize = () => {
+      const rect = canvas.getBoundingClientRect();
+      width = rect.width;
+      height = rect.height;
+      dpr = Math.min(window.devicePixelRatio || 1, 2);
+      canvas.width = Math.max(1, Math.floor(width * dpr));
+      canvas.height = Math.max(1, Math.floor(height * dpr));
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    };
+    resize();
+    window.addEventListener('resize', resize);
+
+    const random = (a: number, b: number) => a + Math.random() * (b - a);
+
+    /**
+     * Espurna individual amb origen lliure (x, y arbitraris). Cada crackle
+     * tria una posició nova al llarg de la base, com la fusta cremant
+     * que cruix de manera impredictible.
+     */
+    const spawn = (originX: number, originY: number, opts: { burst?: number; force?: number } = {}) => {
+      const burst = opts.burst ?? 1;
+      const force = opts.force ?? 1;
+      for (let i = 0; i < burst; i++) {
+        if (sparks.length >= MAX_SPARKS) break;
+        const x = originX + random(-4, 4);
+        const y = originY + random(-3, 3);
+        // Direcció aleatòria amb biaix cap amunt: la majoria pugen, però
+        // algunes salten en diagonal o gairebé horitzontals. Cap explosió
+        // radial perquè el burst és només 1-2 espurnes.
+        // Distribució: 65% del con superior (-PI/2 ± 0.5),
+        //              35% direccions més obertes (±1.4 rad ~ 80°)
+        const angle = Math.random() < 0.65
+          ? -Math.PI / 2 + random(-0.5, 0.5)
+          : -Math.PI / 2 + random(-1.4, 1.4);
+        const speed = random(6, 10) * force;
+        const maxLife = random(220, 380);
+        // Distància màxima de vol abans d'apagar-se completament:
+        // entre 35% i 70% de l'alt del canvas (valor aleatori per espurna)
+        const travelMax = height * random(0.35, 0.7);
+        sparks.push({
+          x,
+          y,
+          vx: Math.cos(angle) * speed,
+          vy: Math.sin(angle) * speed,
+          life: maxLife,
+          maxLife,
+          size: random(0.8, 1.5),
+          hue: random(32, 48),
+          seed: Math.random() * Math.PI * 2,
+          spawnX: x,
+          spawnY: y,
+          travelMax,
+          // Cada espurna té el seu temperament: algunes són tranquil·les
+          // (volatility ~0.2), altres molt nervioses (~0.95)
+          volatility: random(0.15, 0.95),
+        });
+      }
+    };
+
+    /**
+     * Crackle: el cruixit de la fusta. Origen aleatori. Ja no genera "glow"
+     * puntual perquè ara dibuixem una capa de flama persistent a la base.
+     */
+    const crackle = (intensityMul = 1) => {
+      const ox = random(0.05, 0.95) * width;
+      const oy = height - random(2, 30);
+      const burst = Math.random() < 0.25 ? 2 : 1;
+      spawn(ox, oy, { burst: Math.max(1, Math.round(burst * intensityMul)), force: random(0.9, 1.15) });
+    };
+
+    /**
+     * Sistema de partícules de flama amb blur. Cada "punt calent" emet
+     * blobs petits que pugen i s'enfreden (groc → taronja → vermell). Amb
+     * el blur Gaussià es fonen entre si i formen una flama orgànica, no
+     * cercles individuals.
+     */
+    type FlameParticle = {
+      x: number;
+      y: number;
+      vx: number;
+      vy: number;
+      life: number;
+      maxLife: number;
+      size: number;
+    };
+    const flameParticles: FlameParticle[] = [];
+    const FLAME_MAX = 420;
+
+    let flameAcc = 0;
+
+    const emitFlameParticles = (dt: number) => {
+      // Emissió uniforme al llarg de TOTA la base (sense punts calents).
+      // Taxa més alta perquè la flama sigui contínua.
+      flameAcc += dt * 0.18;
+      if (flameAcc < 1) return;
+      const toEmit = Math.floor(flameAcc);
+      flameAcc -= toEmit;
+      for (let n = 0; n < toEmit; n++) {
+        // Posició x totalment aleatòria d'una banda a l'altra
+        const sx = Math.random() * width;
+        const sy = height + 6;
+        if (flameParticles.length >= FLAME_MAX) flameParticles.shift();
+        flameParticles.push({
+          x: sx,
+          y: sy,
+          vx: (Math.random() - 0.5) * 0.6,
+          vy: -1.2 - Math.random() * 1.8,
+          life: 26 + Math.random() * 30,
+          maxLife: 26 + Math.random() * 30,
+          size: 16 + Math.random() * 18,
+        });
+      }
+    };
+
+    const drawFlames = () => {
+      // Filtre blur Gaussià + composite additiu = flama orgànica
+      ctx.save();
+      ctx.filter = 'blur(9px)';
+      ctx.globalCompositeOperation = 'lighter';
+      for (let i = flameParticles.length - 1; i >= 0; i--) {
+        const p = flameParticles[i];
+        const lifeRatio = Math.max(0, p.life / p.maxLife);
+        // Color shift: groc-blanc al naixement, vermell al final
+        // hue: 52 (groc-taronja càlid) → 8 (vermell intens)
+        const hue = 8 + lifeRatio * 44;
+        const sat = 95;
+        const lit = 35 + lifeRatio * 30;
+        // Alpha: pic al mig de la vida, baix al naixement i al final
+        const alphaCurve = Math.sin(lifeRatio * Math.PI);
+        const alpha = alphaCurve * 0.38;
+        ctx.fillStyle = `hsla(${hue}, ${sat}%, ${lit}%, ${alpha})`;
+        const r = p.size * (0.6 + lifeRatio * 0.5);
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.restore();
+    };
+
+    const updateFlames = (dtScale: number) => {
+      for (let i = flameParticles.length - 1; i >= 0; i--) {
+        const p = flameParticles[i];
+        p.x += p.vx * dtScale;
+        p.y += p.vy * dtScale;
+        // L'aire calent les empeny una mica més amunt mentre s'enfreden
+        p.vy -= 0.015 * dtScale;
+        // Turbulència lateral suau perquè el cos de la flama oscil·li
+        p.vx += (Math.random() - 0.5) * 0.18 * dtScale;
+        p.vx *= 0.92;
+        // Fricció vertical per limitar l'altura màxima de la flama
+        p.vy *= 0.98;
+        p.life -= dtScale;
+        if (p.life <= 0 || p.y < height - 120) {
+          flameParticles.splice(i, 1);
+        }
+      }
+    };
+
+    /** Programador de crackles: alterna silencis llargs amb ràfegues */
+    let crackleTimer = 800 + Math.random() * 1400;
+    let pendingDoubleCrackle = false;
+
+    let last = performance.now();
+    let raf = 0;
+    let visible = true;
+
+    const onVisibility = () => {
+      visible = document.visibilityState === 'visible';
+      if (visible) {
+        last = performance.now();
+        raf = requestAnimationFrame(loop);
+      } else {
+        cancelAnimationFrame(raf);
+      }
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+
+    const drawSpark = (s: Spark) => {
+      const lifeRatio = Math.max(0, s.life / s.maxLife);
+      // Color: jove = groc clar; mig = taronja viu; final = vermell apagat
+      const hue = s.hue - (1 - lifeRatio) * 14;
+      const lightness = 55 + lifeRatio * 20;
+      const flicker = 0.7 + Math.sin(performance.now() / 60 + s.seed * 4) * 0.22 + Math.random() * 0.12;
+
+      // Fade progressiu basat en la distància 2D recorreguda des de l'origen.
+      // Comença a apagar-se al 50% de la distància màxima i s'extingeix al 100%.
+      const dx = s.x - s.spawnX;
+      const dy = s.y - s.spawnY;
+      const traveled = Math.sqrt(dx * dx + dy * dy);
+      const fadeStart = s.travelMax * 0.5;
+      const fadeRange = s.travelMax * 0.5;
+      let fade = 1;
+      if (traveled > fadeStart) {
+        fade = Math.max(0, 1 - (traveled - fadeStart) / fadeRange);
+      }
+
+      const alpha = lifeRatio * flicker * fade;
+      if (alpha <= 0.01) return;
+
+      // Halo subtil — petit per no semblar una pilota
+      ctx.fillStyle = `hsla(${hue}, 100%, 60%, ${alpha * 0.3})`;
+      ctx.beginPath();
+      ctx.arc(s.x, s.y, s.size * 2.2, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Nucli brillant: punt de llum compacte
+      ctx.fillStyle = `hsla(${hue + 8}, 100%, ${lightness + 24}%, ${Math.min(1, alpha + 0.5)})`;
+      ctx.beginPath();
+      ctx.arc(s.x, s.y, s.size * 0.7, 0, Math.PI * 2);
+      ctx.fill();
+    };
+
+    const loop = (now: number) => {
+      raf = requestAnimationFrame(loop);
+      const dt = Math.min(34, now - last);
+      last = now;
+      const dtScale = dt / 16.67;
+
+      // Crackle: una espurna solitària surt cada poc, ràpida cap amunt
+      crackleTimer -= dt;
+      if (crackleTimer <= 0) {
+        if (pendingDoubleCrackle) {
+          crackle(1);
+          pendingDoubleCrackle = false;
+          crackleTimer = 600 + Math.random() * 1100;
+        } else {
+          crackle(1);
+          // 25% de probabilitat de segona espurna immediata
+          if (Math.random() < 0.25) {
+            pendingDoubleCrackle = true;
+            crackleTimer = 120 + Math.random() * 260;
+          } else {
+            // Espurnes cada 0.2-0.9s perquè sempre n'hi hagi alguna en vol
+            crackleTimer = (200 + Math.random() * 700) / intensityFinal;
+          }
+        }
+      }
+
+      // Neteja agressiva del frame anterior per evitar acumulació
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.clearRect(0, 0, width, height);
+
+      // Llamas: emetre, actualitzar, dibuixar (amb blur)
+      emitFlameParticles(dt);
+      updateFlames(dtScale);
+      drawFlames();
+
+      ctx.globalCompositeOperation = 'lighter';
+
+      for (let i = sparks.length - 1; i >= 0; i--) {
+        const s = sparks[i];
+
+        // física
+        s.x += s.vx * dtScale;
+        s.y += s.vy * dtScale;
+        // resistència vertical mínima: la chispa manté l'empenta
+        s.vy += 0.004 * dtScale;
+        // Moviment siseant intens: dues oscil·lacions superposades de
+        // diferent freqüència + ruido aleatori = vibració nerviosa
+        const hissA = Math.sin(performance.now() / 35 + s.seed * 7) * 0.32;
+        const hissB = Math.sin(performance.now() / 110 + s.seed * 3) * 0.22;
+        s.vx += (hissA + hissB + (Math.random() - 0.5) * 0.4) * dtScale;
+
+        // Kick lateral sobtat: probabilitat per frame que augmenta amb
+        // la volatilitat de l'espurna. Algunes fan giravolts inesperats.
+        const kickChance = 0.015 + s.volatility * 0.05;
+        if (Math.random() < kickChance * dtScale) {
+          // Volantazo: salta lateralment amb força variable
+          const kickStrength = (1.2 + Math.random() * 2.4) * s.volatility;
+          s.vx += (Math.random() < 0.5 ? -1 : 1) * kickStrength;
+          // De vegades també un petit empenta vertical (la chispa "bota")
+          if (Math.random() < 0.35) s.vy += (Math.random() - 0.5) * 1.2;
+        }
+
+        // Fricció lateral forta perquè el moviment quedi nerviós, no derivi
+        s.vx *= 0.86;
+        s.vy *= 0.999;
+
+        s.life -= dtScale;
+
+        drawSpark(s);
+
+        // Mor quan ha recorregut tota la distància màxima (apagada total)
+        // o quan surt fora del canvas
+        const dx2 = s.x - s.spawnX;
+        const dy2 = s.y - s.spawnY;
+        const traveled2 = Math.sqrt(dx2 * dx2 + dy2 * dy2);
+        if (
+          s.life <= 0 ||
+          traveled2 >= s.travelMax ||
+          s.y < -20 ||
+          s.x < -40 ||
+          s.x > width + 40
+        ) {
+          sparks.splice(i, 1);
+        }
+      }
+
+      ctx.globalCompositeOperation = 'source-over';
+    };
+
+    raf = requestAnimationFrame(loop);
+  }
+</script>
+
+<style>
+  /* El canvas s'adapta al contenidor pare */
+  #embers-canvas {
+    image-rendering: auto;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    #embers-canvas { opacity: 0.7; }
+  }
+</style>

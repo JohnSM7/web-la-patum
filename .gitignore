@@ -28,6 +28,9 @@ pnpm-debug.log*
 .playwright-mcp/
 /la-patum-hero.png
 
+# claude code workspace
+.claude/
+
 # originales de logo en raíz (ya copiados limpios en public/img)
 /ChatGPT_Image_*.png
 /asdasd.png
