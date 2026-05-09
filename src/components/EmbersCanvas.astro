@@ -45,21 +45,30 @@ const { intensity = 1, withGlow = true } = Astro.props;
     const intensity = parseFloat(canvas.dataset.intensity ?? '1') || 1;
     const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
+    // Detectar mòbil per perfil reduït: pointer:coarse OR ample petit OR pocs cores
+    const isMobile =
+      window.matchMedia('(pointer: coarse)').matches ||
+      window.innerWidth < 768 ||
+      (navigator.hardwareConcurrency ?? 8) <= 4;
+
+    // Pressupost de partícules ajustat al dispositiu
+    const profile = isMobile
+      ? { sparks: 60, flames: 140, flameRate: 0.09, blur: 6, dprCap: 1 }
+      : { sparks: 180, flames: 420, flameRate: 0.18, blur: 9, dprCap: 2 };
+
     const sparks: Spark[] = [];
-    const MAX_SPARKS = Math.floor(180 * intensity);
-    // Si l'usuari té reduce-motion, animem igualment però amb menys
-    // intensitat i velocitat. Cap rama estàtica.
+    const MAX_SPARKS = Math.floor(profile.sparks * intensity);
     const intensityFinal = reduceMotion ? intensity * 0.4 : intensity;
 
     let width = 0;
     let height = 0;
-    let dpr = Math.min(window.devicePixelRatio || 1, 2);
+    let dpr = Math.min(window.devicePixelRatio || 1, profile.dprCap);
 
     const resize = () => {
       const rect = canvas.getBoundingClientRect();
       width = rect.width;
       height = rect.height;
-      dpr = Math.min(window.devicePixelRatio || 1, 2);
+      dpr = Math.min(window.devicePixelRatio || 1, profile.dprCap);
       canvas.width = Math.max(1, Math.floor(width * dpr));
       canvas.height = Math.max(1, Math.floor(height * dpr));
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -141,14 +150,13 @@ const { intensity = 1, withGlow = true } = Astro.props;
       size: number;
     };
     const flameParticles: FlameParticle[] = [];
-    const FLAME_MAX = 420;
+    const FLAME_MAX = profile.flames;
 
     let flameAcc = 0;
 
     const emitFlameParticles = (dt: number) => {
       // Emissió uniforme al llarg de TOTA la base (sense punts calents).
-      // Taxa més alta perquè la flama sigui contínua.
-      flameAcc += dt * 0.18;
+      flameAcc += dt * profile.flameRate;
       if (flameAcc < 1) return;
       const toEmit = Math.floor(flameAcc);
       flameAcc -= toEmit;
@@ -171,8 +179,9 @@ const { intensity = 1, withGlow = true } = Astro.props;
 
     const drawFlames = () => {
       // Filtre blur Gaussià + composite additiu = flama orgànica
+      // (blur més baix en mòbil per estalviar GPU)
       ctx.save();
-      ctx.filter = 'blur(9px)';
+      ctx.filter = `blur(${profile.blur}px)`;
       ctx.globalCompositeOperation = 'lighter';
       for (let i = flameParticles.length - 1; i >= 0; i--) {
         const p = flameParticles[i];
@@ -219,18 +228,64 @@ const { intensity = 1, withGlow = true } = Astro.props;
 
     let last = performance.now();
     let raf = 0;
-    let visible = true;
+    // Estats de gating: l'animació només corre si TOTS són true
+    let tabVisible = document.visibilityState === 'visible';
+    let inViewport = true;
+    let isScrolling = false;
+    let running = false;
 
-    const onVisibility = () => {
-      visible = document.visibilityState === 'visible';
-      if (visible) {
-        last = performance.now();
-        raf = requestAnimationFrame(loop);
-      } else {
-        cancelAnimationFrame(raf);
-      }
+    const shouldRun = () => tabVisible && inViewport && !isScrolling;
+
+    const startLoop = () => {
+      if (running || !shouldRun()) return;
+      running = true;
+      last = performance.now();
+      raf = requestAnimationFrame(loop);
     };
-    document.addEventListener('visibilitychange', onVisibility);
+
+    const stopLoop = () => {
+      if (!running) return;
+      running = false;
+      cancelAnimationFrame(raf);
+    };
+
+    document.addEventListener('visibilitychange', () => {
+      tabVisible = document.visibilityState === 'visible';
+      if (shouldRun()) startLoop();
+      else stopLoop();
+    });
+
+    // Pausar durant scroll: el repaint del canvas saturava el thread
+    // principal i feia el scroll laggy en mòbil. Re-arranquem 200ms
+    // després de la última event de scroll.
+    let scrollTimer: ReturnType<typeof setTimeout> | null = null;
+    const onScroll = () => {
+      if (!isScrolling) {
+        isScrolling = true;
+        stopLoop();
+      }
+      if (scrollTimer) clearTimeout(scrollTimer);
+      scrollTimer = setTimeout(() => {
+        isScrolling = false;
+        if (shouldRun()) startLoop();
+      }, 180);
+    };
+    window.addEventListener('scroll', onScroll, { passive: true });
+
+    // IntersectionObserver: pausar quan el hero no està a la pantalla.
+    // Estalvia molt CPU mentre l'usuari està a una secció més avall.
+    const heroSection = canvas.closest('section');
+    if (heroSection && 'IntersectionObserver' in window) {
+      const io = new IntersectionObserver(
+        (entries) => {
+          inViewport = entries[0].isIntersecting;
+          if (shouldRun()) startLoop();
+          else stopLoop();
+        },
+        { threshold: 0, rootMargin: '50px' }
+      );
+      io.observe(heroSection);
+    }
 
     const drawSpark = (s: Spark) => {
       const lifeRatio = Math.max(0, s.life / s.maxLife);
@@ -268,6 +323,7 @@ const { intensity = 1, withGlow = true } = Astro.props;
     };
 
     const loop = (now: number) => {
+      if (!running) return;
       raf = requestAnimationFrame(loop);
       const dt = Math.min(34, now - last);
       last = now;
@@ -356,14 +412,18 @@ const { intensity = 1, withGlow = true } = Astro.props;
       ctx.globalCompositeOperation = 'source-over';
     };
 
-    raf = requestAnimationFrame(loop);
+    startLoop();
   }
 </script>
 
 <style>
-  /* El canvas s'adapta al contenidor pare */
+  /* El canvas s'adapta al contenidor pare. Avisem al compositor
+     perquè el canvas tingui la seva pròpia capa i no provoqui
+     repaints del DOM circumdant. */
   #embers-canvas {
     image-rendering: auto;
+    will-change: transform;
+    contain: paint;
   }
   @media (prefers-reduced-motion: reduce) {
     #embers-canvas { opacity: 0.7; }
