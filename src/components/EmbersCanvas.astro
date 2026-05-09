@@ -228,13 +228,15 @@ const { intensity = 1, withGlow = true } = Astro.props;
 
     let last = performance.now();
     let raf = 0;
-    // Estats de gating: l'animació només corre si TOTS són true
+    // Gating: només para del tot si la pestanya canvia o el hero
+    // surt del viewport. Durant scroll fem "low-power" en lloc de pausar.
     let tabVisible = document.visibilityState === 'visible';
     let inViewport = true;
-    let isScrolling = false;
     let running = false;
+    // Throttle dinàmic: 1.0 = normal, valor menor = redueix emissió i frames
+    let scrollThrottle = 1;
 
-    const shouldRun = () => tabVisible && inViewport && !isScrolling;
+    const shouldRun = () => tabVisible && inViewport;
 
     const startLoop = () => {
       if (running || !shouldRun()) return;
@@ -255,20 +257,20 @@ const { intensity = 1, withGlow = true } = Astro.props;
       else stopLoop();
     });
 
-    // Pausar durant scroll: el repaint del canvas saturava el thread
-    // principal i feia el scroll laggy en mòbil. Re-arranquem 200ms
-    // després de la última event de scroll.
+    // Scroll: redueix la càrrega però NO atura l'animació (perquè en mòbil
+    // qualsevol toc dispara scroll i aturar la canvas amb cada toc fa que
+    // la animació "salti"). Només considerem scroll real un canvi >2px.
     let scrollTimer: ReturnType<typeof setTimeout> | null = null;
+    let lastScrollY = window.scrollY;
     const onScroll = () => {
-      if (!isScrolling) {
-        isScrolling = true;
-        stopLoop();
-      }
+      const dy = Math.abs(window.scrollY - lastScrollY);
+      lastScrollY = window.scrollY;
+      if (dy < 2) return; // ignorem micro-events provocats per touch
+      scrollThrottle = 0.35; // mode eco: emissió i partícules reduïdes
       if (scrollTimer) clearTimeout(scrollTimer);
       scrollTimer = setTimeout(() => {
-        isScrolling = false;
-        if (shouldRun()) startLoop();
-      }, 180);
+        scrollThrottle = 1;
+      }, 140);
     };
     window.addEventListener('scroll', onScroll, { passive: true });
 
@@ -329,22 +331,21 @@ const { intensity = 1, withGlow = true } = Astro.props;
       last = now;
       const dtScale = dt / 16.67;
 
-      // Crackle: una espurna solitària surt cada poc, ràpida cap amunt
+      // Crackle: una espurna solitària surt cada poc, ràpida cap amunt.
+      // Durant scroll real allarguem l'interval per emetre menys.
       crackleTimer -= dt;
       if (crackleTimer <= 0) {
         if (pendingDoubleCrackle) {
           crackle(1);
           pendingDoubleCrackle = false;
-          crackleTimer = 600 + Math.random() * 1100;
+          crackleTimer = (600 + Math.random() * 1100) / scrollThrottle;
         } else {
           crackle(1);
-          // 25% de probabilitat de segona espurna immediata
           if (Math.random() < 0.25) {
             pendingDoubleCrackle = true;
-            crackleTimer = 120 + Math.random() * 260;
+            crackleTimer = (120 + Math.random() * 260) / scrollThrottle;
           } else {
-            // Espurnes cada 0.2-0.9s perquè sempre n'hi hagi alguna en vol
-            crackleTimer = (200 + Math.random() * 700) / intensityFinal;
+            crackleTimer = (200 + Math.random() * 700) / (intensityFinal * scrollThrottle);
           }
         }
       }
@@ -353,8 +354,8 @@ const { intensity = 1, withGlow = true } = Astro.props;
       ctx.globalCompositeOperation = 'source-over';
       ctx.clearRect(0, 0, width, height);
 
-      // Llamas: emetre, actualitzar, dibuixar (amb blur)
-      emitFlameParticles(dt);
+      // Llamas: emetre amb throttle dinàmic, actualitzar, dibuixar (amb blur)
+      emitFlameParticles(dt * scrollThrottle);
       updateFlames(dtScale);
       drawFlames();
 
